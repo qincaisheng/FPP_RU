@@ -1,0 +1,156 @@
+library(forecast)
+library(tseries)
+
+data_numeric <- read.csv("gdp.csv", sep = ";")
+data_perc <- read.csv("prognoz.csv", sep = ";")
+names(data)
+colnames(data_perc)[1] <- "GDP"
+data1 = as.matrix(data_numeric$RGDP)
+data2 = as.matrix(log(data_perc$GDP))
+
+trainingdata1 <- ts(data1, start = c(1990), end = c(2017))
+plot(trainingdata1)
+actual.outsample1 = data1[27:28, 1]
+
+trainingdata2 <- ts(data2, start = c(2011), end = c(2018), frequency = 4)
+plot(trainingdata2)
+actual.outsample2 = data2[30:30]
+
+fit1 <- auto.arima(trainingdata1, trace = TRUE, test = "adf", ic = "aic")
+summary(fit1)
+
+fit2 <- auto.arima(trainingdata2, trace = TRUE, test = "adf", ic = "aic")
+summary(fit2)
+
+tr_q <- c(22274)
+data_2_filter <- c(data2, tr_q)
+
+holt <- HoltWinters(data2, gamma = FALSE)
+holt
+plot(holt)
+holt_ch_q <- HoltWinters(data_2_filter, gamma = FALSE)
+holt_ch_q
+plot(holt_ch_q)
+
+jarque.bera.test(fit1$residuals)
+Box.test(fit1$residuals, lag = 10, type = "Ljung-Box")
+acf(fit1$residuals, lag.max = 24, main = "ACF of the Model")
+forecasted.data1 = forecast(fit1, h = 1)
+forecasted.data1
+plot(forecasted.data1)
+
+jarque.bera.test(fit2$residuals)
+Box.test(fit2$residuals, lag = 10, type = "Ljung-Box")
+acf(fit2$residuals, lag.max = 24, main = "ACF of the Model")
+forecasted.data2 = forecast(fit2, h = 7)
+forecasted.data2
+plot(forecasted.data2)
+
+library(TSPred)
+actual.outsample.ts1 = ts(actual.outsample1, start = c(2016))
+plotarimapred(actual.outsample.ts1, fit1, xlim = c(2016,2018), range.percent = 0.05)
+
+
+summary(fit1)
+accuracy(actual.outsample1, forecasted.data1$mean)
+
+summary(fit2)
+logtrainingdata2 <- log(trainingdata2)
+adf.test(logtrainingdata2)
+
+
+upper = as.matrix(forecasted.data1$upper)
+
+
+consumption = as.matrix(data_perc$Final.consumption.expenditure)
+consumption <- log(consumption)
+consumption_ts <- ts(consumption, start = 2011, end = 2018, frequency = 4)
+test_consumption <- consumption[30]
+
+fit_consumption <- auto.arima(consumption_ts, trace = TRUE, test = "adf", ic = "aic")
+summary(fit_consumption)
+
+forecast_consumption <- forecast(fit_consumption, h = 3)
+forecast_consumption <- exp(forecast_consumption$mean)
+forecast_consumption
+
+
+public <- as.matrix(data_perc$General.government.final.consumption.expenditure)
+public <- log(public)
+public_ts <- ts(public, start = 2011, end = 2018, frequency = 4)
+test_public <- public[30]
+
+fit_public <- auto.arima(public_ts, trace = TRUE, test = "adf", ic = "aic")
+summary(fit_public)
+forecast_public <- forecast(fit_public, h = 3)
+forecast_public <- exp(forecast_public$mean)
+forecast_public
+
+
+capital <- as.matrix(data_perc$Gross.fixed.capital.formation)
+capital <- log(capital)
+capital_ts <- ts(capital, start = 2011, end = 2018, frequency = 4)
+test_capital <- capital[30]
+fit_capital <- auto.arima(capital_ts, trace = TRUE, test = "adf", ic = "aic")
+summary(fit_capital)
+forecast_capital <- forecast(fit_capital, h = 3)
+forecast_capital <- exp(forecast_capital$mean)
+forecast_capital
+
+ex <- as.matrix(data_perc$Exports.of.goods.and.services)
+ex <- log(ex)
+ex_ts <- ts(ex, start = 2011, end = 2018, frequency = 4)
+test_ex <- ex[26:30]
+fit_ex <- auto.arima(ex_ts, trace = TRUE, test = "adf", ic = "aic")
+summary(fit_ex)
+forecast_ex <- forecast(fit_ex, h = 3)
+forecast_ex <- exp(forecast_ex$mean)
+forecast_ex
+
+im <- as.matrix(data_perc$Imports.of.goods.and.services)
+im <- log(im)
+im_ts <- ts(im, start = 2011, end = 2018, frequency = 4)
+test_im <- im[26:30]
+fit_im <- auto.arima(im_ts, trace = TRUE, test = "adf", ic = "aic")
+summary(fit_im)
+forecast_im <- forecast(fit_im, h = 3)
+forecast_im <- exp(forecast_im$mean)
+forecast_im
+
+library(ggplot2)
+library(forecast)
+
+#БУТСТРЭЭЭЭЭЭП
+#БУТСТРЭЭЭЭЭП
+
+GDP <- trainingdata2
+bootseries <- bld.mbb.bootstrap(GDP, 10) %>% 
+  as.data.frame() %>% ts(start=2011, frequency=4)
+
+autoplot(GDP) + autolayer(bootseries) + autolayer(GDP, colour = FALSE) + guides(colour="none")
+
+nsim <- 1000L
+sim <- bld.mbb.bootstrap(GDP, nsim)
+
+h <- 36L
+future <- matrix(0, nrow = nsim, ncol = h)
+for (i in seq(nsim))
+  future[i,] <- simulate(ets(sim[[i]]), nsim = h)
+
+start <- tsp(GDP)[2] + 1/4
+simfc <- structure(list(
+  mean = ts(colMeans(future), start=start, frequency=4),
+  lower = ts(apply(future, 2, quantile, prob = 0.025),
+             start=start, frequency = 4),
+  upper = ts(apply(future, 2, quantile, prob = 0.975),
+             start=start, frequency = 4),
+  level = 95),
+  class = "forecast")
+
+
+etsfc <- forecast(ets(GDP), h = h, level = 95)
+autoplot(GDP) +
+  ggtitle("GDP квартальный") +
+  xlab("Год") + ylab("лог") +
+  autolayer(simfc, series = "Simulated") +
+  autolayer(etsfc, series = "ETS")
